@@ -22,6 +22,7 @@ export default function Home() {
 
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const countdownRef = useRef<NodeJS.Timeout | null>(null);
+  const goTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const questionStartTimeRef = useRef<number>(0);
 
   // Load events
@@ -92,6 +93,9 @@ export default function Home() {
       if (countdownRef.current) {
         clearInterval(countdownRef.current);
       }
+      if (goTimeoutRef.current) {
+        clearTimeout(goTimeoutRef.current);
+      }
       if (timerRef.current) {
         clearInterval(timerRef.current);
       }
@@ -99,25 +103,42 @@ export default function Home() {
   }, []);
 
   const startGame = () => {
+    if (countdownRef.current) {
+      clearInterval(countdownRef.current);
+      countdownRef.current = null;
+    }
+    if (goTimeoutRef.current) {
+      clearTimeout(goTimeoutRef.current);
+      goTimeoutRef.current = null;
+    }
+
+    setCountdown(3);
     setGameState("countdown");
 
-    let count = 3;
-    setCountdown(count);
+    let nextValue = 3;
+    countdownRef.current = setInterval(() => {
+      nextValue -= 1;
 
-    const countdownInterval = setInterval(() => {
-      count--;
-      setCountdown(count);
-
-      if (count === 0) {
-        clearInterval(countdownInterval);
-        setTimeout(() => {
-          setGameState("playing");
-        }, 500);
+      if (nextValue > 0) {
+        setCountdown(nextValue);
+        return;
       }
+
+      setCountdown(0);
+
+      if (countdownRef.current) {
+        clearInterval(countdownRef.current);
+        countdownRef.current = null;
+      }
+
+      goTimeoutRef.current = setTimeout(() => {
+        setGameState("playing");
+        setCountdown(3);
+      }, 600);
     }, 1000);
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!yearInput) return;
 
     const currentEvent = events[currentEventIndex];
@@ -149,9 +170,6 @@ export default function Home() {
       }
 
       // Save to leaderboard
-      const leaderboard = JSON.parse(
-        localStorage.getItem("leaderboard") || "[]"
-      );
       const entry = {
         name: username || "Anonymous",
         totalScore: newResults.reduce((sum, r) => sum + r.score, 0),
@@ -159,8 +177,18 @@ export default function Home() {
         results: newResults,
         isPotentialCheater,
       };
-      leaderboard.push(entry);
-      localStorage.setItem("leaderboard", JSON.stringify(leaderboard));
+
+      try {
+        await fetch("/api/leaderboard", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(entry),
+        });
+      } catch (error) {
+        console.error("Failed to post leaderboard entry", error);
+      }
     } else {
       setCurrentEventIndex(currentEventIndex + 1);
       setYearInput("");
@@ -185,77 +213,74 @@ export default function Home() {
   // Instructions Screen
   if (gameState === "instructions") {
     return (
-      <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800">
-        <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl p-8 max-w-lg w-full">
-          <div className="text-center mb-8">
-            <h1 className="text-5xl font-bold mb-4">
-              <span className="bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
+      <div className="min-h-[100svh] flex items-center justify-center bg-gradient-to-br from-violet-100 via-sky-100 to-rose-100 dark:from-gray-950 dark:via-indigo-950 dark:to-purple-900 px-6 py-12">
+        <div className="w-full max-w-xl rounded-[2.5rem] bg-white/90 dark:bg-gray-900/80 backdrop-blur-xl border border-white/40 dark:border-gray-700/60 shadow-[0_30px_80px_rgba(79,70,229,0.25)] px-6 py-10 sm:px-10 flex flex-col gap-8">
+          <div className="text-center space-y-3">
+            <p className="inline-flex items-center rounded-full bg-indigo-100/80 dark:bg-indigo-900/50 px-4 py-1 text-sm font-semibold text-indigo-600 dark:text-indigo-300 tracking-[0.2em] uppercase">
+              Daily history challenge
+            </p>
+            <h1 className="text-4xl sm:text-5xl font-bold leading-tight">
+              <span className="bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 bg-clip-text text-transparent">
                 WhenWasIt? 📅
               </span>
             </h1>
-            <p className="text-gray-600 dark:text-gray-400 text-lg">
-              Test your knowledge of history!
+            <p className="text-base sm:text-lg text-gray-600 dark:text-gray-300">
+              Guess the year of five iconic events before the clock runs out.
             </p>
           </div>
 
           {/* Username Input */}
-          <div className="mb-8">
-            <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-3 text-center">
-              Enter your name (optional)
+          <div className="space-y-3">
+            <label className="block text-xs font-semibold uppercase tracking-[0.25em] text-gray-500 dark:text-gray-400 text-center">
+              leaderboard name (optional)
             </label>
             <input
               type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              onKeyPress={(e) => e.key === "Enter" && startGame()}
-              className="w-full px-6 py-4 text-lg text-center bg-white dark:bg-gray-700 border-2 border-gray-200 dark:border-gray-600 rounded-2xl focus:outline-none focus:ring-4 focus:ring-indigo-200 dark:focus:ring-indigo-900 focus:border-indigo-400 dark:focus:border-indigo-500 transition-all text-gray-900 dark:text-white placeholder-gray-300 dark:placeholder-gray-600"
-              placeholder="Your name"
+              onKeyDown={(e) => e.key === "Enter" && startGame()}
+              className="w-full rounded-2xl border border-gray-200/80 dark:border-gray-700 bg-white/90 dark:bg-gray-800/80 px-6 py-4 text-center text-lg text-gray-900 dark:text-white placeholder:text-gray-300 focus:outline-none focus:ring-4 focus:ring-indigo-200 dark:focus:ring-indigo-900 focus:border-indigo-400 dark:focus:border-indigo-500 transition"
+              placeholder="Play as..."
               maxLength={20}
             />
-            <p className="text-xs text-gray-500 dark:text-gray-500 mt-2 text-center">
-              Will appear on the leaderboard
+            <p className="text-xs text-gray-500 dark:text-gray-400 text-center">
+              No account needed — your results stay on this device.
             </p>
           </div>
 
-          <div className="space-y-6 mb-8">
-            <div className="bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20 p-6 rounded-2xl border-2 border-indigo-100 dark:border-indigo-900">
-              <h2 className="text-xl font-bold mb-4 text-gray-900 dark:text-white text-center">
-                How to Play
-              </h2>
-              <ul className="space-y-3 text-gray-700 dark:text-gray-300 text-sm">
-                <li className="flex items-start gap-3">
-                  <span className="text-xl">📜</span>
-                  <span>Guess when 5 historical events happened</span>
-                </li>
-                <li className="flex items-start gap-3">
-                  <span className="text-xl">⏱️</span>
-                  <span>Race against the clock for each event</span>
-                </li>
-                <li className="flex items-start gap-3">
-                  <span className="text-xl">🎯</span>
-                  <span>100 points for exact year, -1 point per year off</span>
-                </li>
-                <li className="flex items-start gap-3">
-                  <span className="text-xl">🏆</span>
-                  <span>Compete on the leaderboard!</span>
-                </li>
-              </ul>
-            </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            {[
+              { icon: "📜", text: "Five events per round" },
+              { icon: "⏱️", text: "Timer per question" },
+              { icon: "🎯", text: "Closer = higher score" },
+              { icon: "🏆", text: "Share + leaderboard" },
+            ].map((item) => (
+              <div
+                key={item.text}
+                className="flex items-center gap-3 rounded-2xl border border-indigo-100/60 dark:border-indigo-900/60 bg-gradient-to-br from-white/80 to-indigo-50/60 dark:from-indigo-950/40 dark:to-purple-950/40 px-4 py-4 shadow-sm"
+              >
+                <span className="text-2xl">{item.icon}</span>
+                <p className="text-sm font-semibold text-gray-700 dark:text-gray-200">
+                  {item.text}
+                </p>
+              </div>
+            ))}
           </div>
 
-          <button
-            onClick={startGame}
-            className="w-full bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white font-bold py-5 px-6 rounded-2xl transition-all text-xl shadow-lg hover:shadow-xl transform hover:scale-[1.02] active:scale-[0.98]"
-          >
-            Start Game 🚀
-          </button>
-
-          <a
-            href="/leaderboard"
-            className="block text-center mt-4 text-indigo-600 dark:text-indigo-400 hover:underline font-semibold"
-          >
-            View Leaderboard 🏆
-          </a>
+          <div className="flex flex-col gap-3">
+            <button
+              onClick={startGame}
+              className="w-full rounded-2xl bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 py-5 text-lg font-semibold text-white shadow-lg shadow-purple-500/30 transition-transform duration-200 hover:scale-[1.02] active:scale-95"
+            >
+              Start the Countdown 🚀
+            </button>
+            <a
+              href="/leaderboard"
+              className="text-center text-sm font-semibold text-indigo-600 hover:text-indigo-500 dark:text-indigo-300"
+            >
+              Peek at today’s leaderboard ↗
+            </a>
+          </div>
         </div>
       </div>
     );
@@ -264,13 +289,14 @@ export default function Home() {
   // Countdown Screen
   if (gameState === "countdown") {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800">
-        <div className="text-center">
-          <div className="text-9xl font-bold animate-pulse">
-            <span className="bg-gradient-to-r from-indigo-600 to-purple-600 dark:from-indigo-300 dark:to-purple-300 bg-clip-text text-transparent">
-              {countdown > 0 ? countdown : "GO!"}
+      <div className="min-h-[100svh] flex items-center justify-center bg-gradient-to-br from-indigo-900 via-purple-800 to-pink-800 text-white">
+        <div className="flex flex-col items-center gap-6 text-center">
+          <div className="inline-flex h-40 w-40 items-center justify-center rounded-full bg-white/10 backdrop-blur-xl shadow-[0_20px_60px_rgba(0,0,0,0.35)]">
+            <span className="text-7xl font-black tracking-tight drop-shadow-xl">
+              {countdown > 0 ? countdown : "GO"}
             </span>
           </div>
+          <p className="text-sm uppercase tracking-[0.4em] opacity-80">Get ready…</p>
         </div>
       </div>
     );
@@ -282,10 +308,10 @@ export default function Home() {
     const totalTime = results.reduce((sum, r) => sum + r.timeSpent, 0);
 
     return (
-      <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800">
-        <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl p-8 max-w-2xl w-full">
-          <h1 className="text-4xl font-bold text-center mb-8">
-            <span className="bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
+      <div className="min-h-[100svh] flex items-center justify-center px-6 py-12 bg-gradient-to-br from-violet-100 via-sky-100 to-rose-100 dark:from-gray-950 dark:via-indigo-950 dark:to-purple-900">
+        <div className="w-full max-w-3xl rounded-[2.5rem] bg-white/90 dark:bg-gray-900/85 backdrop-blur-[18px] border border-white/40 dark:border-gray-800/60 shadow-[0_35px_90px_rgba(79,70,229,0.25)] px-6 py-10 sm:px-12 space-y-8">
+          <h1 className="text-center text-4xl sm:text-5xl font-bold">
+            <span className="bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 bg-clip-text text-transparent">
               Game Complete! 🎉
             </span>
           </h1>
@@ -301,27 +327,28 @@ export default function Home() {
             </div>
           )}
 
-          <div className="text-center mb-8">
-            <p className="text-6xl font-bold mb-2">
-              <span className="bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
-                {totalScore}/500
+          <div className="text-center">
+            <p className="text-6xl font-black tracking-tight mb-3">
+              <span className="bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 bg-clip-text text-transparent">
+                {totalScore}
               </span>
+              <span className="text-2xl text-gray-500 dark:text-gray-400"> / 500</span>
             </p>
-            <p className="text-gray-600 dark:text-gray-400 text-lg">
-              Total Score • {totalTime}s
+            <p className="text-base font-semibold uppercase tracking-[0.25em] text-gray-500 dark:text-gray-400">
+              {totalTime}s total
             </p>
           </div>
 
-          <div className="space-y-3 mb-8">
+          <div className="grid gap-4">
             {results.map((result, idx) => (
               <div
                 key={idx}
-                className="flex items-center justify-between p-5 bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-700 dark:to-gray-700/80 rounded-2xl border border-gray-200 dark:border-gray-600"
+                className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-2xl border border-indigo-100/70 dark:border-indigo-900/50 bg-gradient-to-r from-white/90 to-indigo-50/60 dark:from-gray-800/60 dark:to-indigo-900/40 px-5 py-4 shadow-md"
               >
                 <div className="flex items-center gap-3">
                   <span className="text-3xl">{result.emoji}</span>
                   <div>
-                    <p className="font-semibold text-gray-900 dark:text-white">
+                    <p className="font-semibold text-gray-900 dark:text-white leading-tight">
                       {events[idx].name}
                     </p>
                     <p className="text-sm text-gray-600 dark:text-gray-400">
@@ -332,23 +359,23 @@ export default function Home() {
                     </p>
                   </div>
                 </div>
-                <div className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">
+                <div className="text-2xl font-bold text-indigo-600 dark:text-indigo-300">
                   {result.score}
                 </div>
               </div>
             ))}
           </div>
 
-          <div className="flex gap-4">
+          <div className="flex flex-col sm:flex-row gap-4">
             <button
               onClick={handleShare}
-              className="flex-1 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white font-bold py-4 px-6 rounded-2xl transition-all shadow-lg hover:shadow-xl transform hover:scale-[1.02] active:scale-[0.98]"
+              className="flex-1 rounded-2xl bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 py-4 text-lg font-semibold text-white shadow-lg shadow-purple-500/30 transition-transform duration-200 hover:scale-[1.01] active:scale-95"
             >
               Share Results 📋
             </button>
             <a
               href="/leaderboard"
-              className="flex-1 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 text-gray-900 dark:text-white font-bold py-4 px-6 rounded-2xl transition-all text-center border-2 border-gray-200 dark:border-gray-600 shadow-md hover:shadow-lg transform hover:scale-[1.02] active:scale-[0.98]"
+              className="flex-1 rounded-2xl border border-indigo-200/60 dark:border-indigo-800/40 bg-white/80 dark:bg-gray-800/70 py-4 text-center text-lg font-semibold text-indigo-600 dark:text-indigo-300 shadow-md hover:bg-white hover:text-indigo-700 dark:hover:bg-gray-800/90"
             >
               Leaderboard 🏆
             </a>
@@ -356,7 +383,7 @@ export default function Home() {
 
           <button
             onClick={() => window.location.reload()}
-            className="w-full mt-4 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 font-medium py-3 transition-colors"
+            className="w-full text-sm font-semibold uppercase tracking-[0.3em] text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
           >
             Play Again
           </button>
@@ -369,105 +396,66 @@ export default function Home() {
   const currentEvent = events[currentEventIndex];
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-6 bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 dark:from-gray-900 dark:via-indigo-950 dark:to-purple-950">
-      <div className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-xl rounded-[2.5rem] shadow-2xl p-8 max-w-lg w-full border border-white/20 dark:border-gray-700/50">
+    <div className="min-h-[100svh] bg-gradient-to-br from-slate-900 via-indigo-900 to-purple-900 dark:from-black dark:via-slate-950 dark:to-indigo-950 px-4 py-6 flex items-center justify-center">
+      <div className="w-full max-w-md rounded-[2.5rem] border border-white/30 dark:border-gray-800/60 bg-white/85 dark:bg-gray-900/85 backdrop-blur-[18px] shadow-[0_35px_90px_rgba(15,23,42,0.55)] px-6 py-6 sm:px-8 sm:py-8 flex flex-col h-full max-h-[720px]">
         {/* Header */}
-        <div className="flex justify-between items-center mb-8">
-          <div className="flex items-center gap-3 bg-gradient-to-r from-indigo-100 to-purple-100 dark:from-indigo-900/30 dark:to-purple-900/30 px-4 py-2 rounded-full">
+        <div className="flex items-center justify-between gap-3 mb-6">
+          <div className="flex items-center gap-3 rounded-full bg-indigo-100/80 dark:bg-indigo-900/30 px-4 py-2">
             <span className="text-3xl drop-shadow-sm">{currentEvent.emoji}</span>
-            <span className="text-sm font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
+            <span className="text-xs font-semibold uppercase tracking-[0.35em] text-indigo-600 dark:text-indigo-300">
               {currentEventIndex + 1}/{events.length}
             </span>
           </div>
-          <div className="bg-gradient-to-r from-indigo-100 to-purple-100 dark:from-indigo-900/30 dark:to-purple-900/30 px-5 py-2 rounded-full">
-            <span className="text-lg font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
-              ⏱️ {timer}s
+          <div className="flex items-center gap-2 rounded-full bg-slate-900 text-white px-4 py-2 shadow-lg shadow-slate-900/30 dark:bg-white/10">
+            <span className="text-base font-semibold">⏱️</span>
+            <span className="text-sm font-bold tracking-[0.3em]">
+              {timer.toString().padStart(2, "0")}s
             </span>
           </div>
         </div>
 
         {/* Event Title */}
-        <div className="text-center mb-8">
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-3 leading-tight">
+        <div className="text-center mb-6">
+          <p className="text-xs font-semibold uppercase tracking-[0.35em] text-gray-500 dark:text-gray-400 mb-2">
+            Guess the year
+          </p>
+          <h2 className="text-2xl font-semibold text-gray-900 dark:text-white leading-tight">
             {currentEvent.name}
           </h2>
-          <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">
+          <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
             When did this happen?
           </p>
         </div>
 
-        {/* Year Display */}
-        <div className="mb-6">
-          <div className="bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-700 dark:to-gray-800 rounded-2xl p-6 border-2 border-gray-200 dark:border-gray-600">
-            <p className="text-sm text-gray-500 dark:text-gray-400 mb-2 text-center font-medium">
-              Your Guess
-            </p>
-            <div className="text-5xl font-bold text-center text-gray-900 dark:text-white min-h-[3rem] flex items-center justify-center gap-2">
-              {yearInput || "____"}
-              <span className="text-3xl text-gray-600 dark:text-gray-400">
-                {isBC ? "BC" : "AD"}
-              </span>
-            </div>
-          </div>
-        </div>
+        <div className="flex-1 flex flex-col gap-6">
+          <NumericKeypad
+            value={yearInput}
+            onChange={setYearInput}
+            isBC={isBC}
+            onToggleEra={() => setIsBC((prev) => !prev)}
+            maxLength={4}
+          />
 
-        {/* Era Slider */}
-        <div className="flex justify-center mb-8">
           <button
-            onClick={() => setIsBC(!isBC)}
-            className="relative w-72 h-20 bg-gradient-to-r from-gray-100 to-gray-200 dark:from-gray-700 dark:to-gray-800 rounded-full transition-all shadow-inner"
+            onClick={handleSubmit}
+            disabled={!yearInput}
+            className="w-full rounded-[1.5rem] bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 py-4 text-lg font-semibold text-white shadow-lg shadow-purple-500/30 transition-all duration-200 hover:scale-[1.01] active:scale-95 disabled:cursor-not-allowed disabled:bg-gradient-to-r disabled:from-slate-300 disabled:to-slate-400 dark:disabled:from-gray-700 dark:disabled:to-gray-800"
           >
-            {/* Slider Track */}
-            <div
-              className={`absolute top-2 ${
-                isBC ? "left-2" : "left-[calc(100%-9.5rem)]"
-              } w-36 h-16 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 rounded-full shadow-xl transition-all duration-300 ease-out`}
-            />
-            {/* Labels */}
-            <div className="absolute inset-0 flex items-center justify-between px-12">
-              <span
-                className={`font-bold text-3xl z-10 transition-all duration-300 ${
-                  isBC ? "text-white scale-110" : "text-gray-500 dark:text-gray-400"
-                }`}
-              >
-                BC
-              </span>
-              <span
-                className={`font-bold text-3xl z-10 transition-all duration-300 ${
-                  !isBC ? "text-white scale-110" : "text-gray-500 dark:text-gray-400"
-                }`}
-              >
-                AD
-              </span>
-            </div>
+            Lock It In ✨
           </button>
         </div>
 
-        {/* Numeric Keypad */}
-        <div className="mb-8">
-          <NumericKeypad value={yearInput} onChange={setYearInput} maxLength={4} />
-        </div>
-
-        {/* Submit Button */}
-        <button
-          onClick={handleSubmit}
-          disabled={!yearInput}
-          className="w-full bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 hover:from-indigo-600 hover:via-purple-600 hover:to-pink-600 disabled:from-gray-300 disabled:to-gray-400 dark:disabled:from-gray-700 dark:disabled:to-gray-800 disabled:cursor-not-allowed text-white font-bold py-5 px-6 rounded-[1.5rem] transition-all duration-200 text-xl shadow-xl hover:shadow-2xl transform active:scale-95 hover:scale-[1.02]"
-        >
-          Submit Guess ✨
-        </button>
-
         {/* Progress Dots */}
-        <div className="mt-8 flex justify-center gap-2.5">
+        <div className="mt-6 flex justify-center gap-2.5">
           {events.map((_, idx) => (
             <div
               key={idx}
               className={`h-2.5 rounded-full transition-all duration-300 ${
                 idx < currentEventIndex
-                  ? "bg-gradient-to-r from-green-400 to-emerald-500 w-10 shadow-md"
+                  ? "bg-gradient-to-r from-emerald-400 to-emerald-500 w-10 shadow-md"
                   : idx === currentEventIndex
                   ? "bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 w-10 shadow-lg"
-                  : "bg-gray-300 dark:bg-gray-600 w-2.5"
+                  : "bg-gray-300/80 dark:bg-gray-600/80 w-2.5"
               }`}
             />
           ))}

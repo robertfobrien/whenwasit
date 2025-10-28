@@ -3,18 +3,22 @@
 interface NumericKeypadProps {
   value: string;
   onChange: (value: string) => void;
+  onToggleEra: () => void;
+  isBC: boolean;
   maxLength?: number;
 }
 
-export default function NumericKeypad({ value, onChange, maxLength = 4 }: NumericKeypadProps) {
+export default function NumericKeypad({
+  value,
+  onChange,
+  onToggleEra,
+  isBC,
+  maxLength = 4,
+}: NumericKeypadProps) {
   const handleNumberClick = (num: string) => {
     if (value.length < maxLength) {
       onChange(value + num);
     }
-  };
-
-  const handleBackspace = () => {
-    onChange(value.slice(0, -1));
   };
 
   const handleClear = () => {
@@ -26,10 +30,13 @@ export default function NumericKeypad({ value, onChange, maxLength = 4 }: Numeri
   return (
     <div className="w-full max-w-sm mx-auto">
       {/* Display */}
-      <div className="mb-8 p-8 bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 dark:from-indigo-900/20 dark:via-purple-900/20 dark:to-pink-900/20 rounded-[2rem] shadow-xl min-h-[100px] flex items-center justify-center backdrop-blur-sm">
-        <div className="text-6xl font-bold text-center tracking-wider">
+      <div className="mb-6 p-6 bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 dark:from-indigo-900/20 dark:via-purple-900/20 dark:to-pink-900/20 rounded-[1.75rem] shadow-lg min-h-[88px] flex items-center justify-center backdrop-blur-sm">
+        <div className="flex items-baseline gap-3 text-5xl font-bold tracking-wider">
           <span className="bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 bg-clip-text text-transparent drop-shadow-sm">
             {value || "____"}
+          </span>
+          <span className="text-base font-semibold uppercase text-indigo-500 dark:text-indigo-300 tracking-[0.4em]">
+            {isBC ? "BC" : "AD"}
           </span>
         </div>
       </div>
@@ -62,10 +69,11 @@ export default function NumericKeypad({ value, onChange, maxLength = 4 }: Numeri
         </button>
 
         <button
-          onClick={handleBackspace}
-          className="aspect-square bg-gradient-to-br from-orange-100 to-orange-50 dark:from-orange-900/30 dark:to-orange-800/20 hover:from-orange-500 hover:to-orange-600 text-orange-600 dark:text-orange-400 hover:text-white text-3xl font-bold rounded-[1.5rem] shadow-lg hover:shadow-2xl transition-all duration-200 transform active:scale-90 hover:scale-105 flex items-center justify-center"
+          onClick={onToggleEra}
+          className="aspect-square bg-gradient-to-br from-indigo-100 to-purple-100 dark:from-indigo-900/30 dark:to-purple-900/30 hover:from-indigo-500 hover:via-purple-500 hover:to-pink-500 dark:hover:from-indigo-600 dark:hover:via-purple-600 dark:hover:to-pink-600 text-lg font-bold rounded-[1.5rem] shadow-lg hover:shadow-2xl transition-all duration-200 transform active:scale-90 hover:scale-105 flex flex-col items-center justify-center"
         >
-          ←
+          <span className="text-2xl">{isBC ? "BC" : "AD"}</span>
+          <span className="text-[10px] tracking-widest text-gray-500 dark:text-gray-300">toggle</span>
         </button>
       </div>
     </div>

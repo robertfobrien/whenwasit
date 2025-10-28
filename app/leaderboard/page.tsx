@@ -8,16 +8,22 @@ export default function Leaderboard() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Load from localStorage for now
-    const stored = localStorage.getItem("leaderboard");
-    if (stored) {
-      const data = JSON.parse(stored);
-      const sorted = data.sort((a: LeaderboardEntry, b: LeaderboardEntry) =>
-        b.totalScore - a.totalScore
-      );
-      setEntries(sorted.slice(0, 100));
-    }
-    setLoading(false);
+    const loadLeaderboard = async () => {
+      try {
+        const response = await fetch("/api/leaderboard");
+        if (!response.ok) {
+          throw new Error("Failed to fetch leaderboard");
+        }
+        const data = await response.json();
+        setEntries(data);
+      } catch (error) {
+        console.error(error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadLeaderboard();
   }, []);
 
   if (loading) {
