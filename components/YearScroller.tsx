@@ -77,7 +77,7 @@ interface ScrollWheelProps {
   min: number;
   max: number;
   label: string;
-  color: string;
+  color: "indigo" | "purple" | "pink";
 }
 
 function ScrollWheel({ value, onChange, min, max, label, color }: ScrollWheelProps) {
