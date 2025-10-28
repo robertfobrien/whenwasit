@@ -1,0 +1,32 @@
+[
+  {
+    "id": "1",
+    "name": "Pablo Picasso born",
+    "year": 1881,
+    "emoji": "🎨"
+  },
+  {
+    "id": "2",
+    "name": "Julius Caesar assassinated",
+    "year": -44,
+    "emoji": "⚔️"
+  },
+  {
+    "id": "3",
+    "name": "First moon landing",
+    "year": 1969,
+    "emoji": "🌕"
+  },
+  {
+    "id": "4",
+    "name": "Fall of the Berlin Wall",
+    "year": 1989,
+    "emoji": "🧱"
+  },
+  {
+    "id": "5",
+    "name": "Declaration of Independence signed",
+    "year": 1776,
+    "emoji": "📜"
+  }
+]
