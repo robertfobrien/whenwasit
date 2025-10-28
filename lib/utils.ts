@@ -22,10 +22,11 @@ export function getDailyEvents(allEvents: Event[], date: Date): Event[] {
   return shuffled.slice(0, 5);
 }
 
-export function formatShareText(results: GameResult[], siteUrl: string): string {
+export function formatShareText(results: GameResult[], siteUrl: string, isCheater: boolean = false): string {
   const totalScore = results.reduce((sum, r) => sum + r.score, 0);
   const scoresWithEmojis = results.map(r => `${r.score} ${r.emoji}`).join(', ');
-  return `WhenWasIt ${totalScore}/500\n${scoresWithEmojis}\n${siteUrl}`;
+  const cheaterText = isCheater ? '\nAnd I am a cheater!' : '';
+  return `WhenWasIt ${totalScore}/500\n${scoresWithEmojis}\n${siteUrl}${cheaterText}`;
 }
 
 export function getYearRange(actualYear: number): { min: number; max: number } {
