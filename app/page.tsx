@@ -24,33 +24,44 @@ export default function Home() {
   const countdownRef = useRef<NodeJS.Timeout | null>(null);
   const goTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const questionStartTimeRef = useRef<number>(0);
+  const todaysEmojis = events.slice(0, 5).map((event) => event.emoji);
+
+  // Restore username from prior visits
+  useEffect(() => {
+    try {
+      const storedUsername = localStorage.getItem("wwi.username");
+      if (storedUsername) {
+        setUsername(storedUsername);
+      }
+    } catch (error) {
+      console.error("Failed to restore username", error);
+    }
+  }, []);
+
+  // Persist username for future sessions
+  useEffect(() => {
+    try {
+      if (!username) {
+        localStorage.removeItem("wwi.username");
+        return;
+      }
+
+      localStorage.setItem("wwi.username", username);
+    } catch (error) {
+      console.error("Failed to persist username", error);
+    }
+  }, [username]);
 
   // Load events
   useEffect(() => {
-    // Check if admin has selected specific events
-    const dailyEventIds = localStorage.getItem("dailyEventIds");
-    const customEvents = localStorage.getItem("customEvents");
-
-    if (dailyEventIds && customEvents) {
-      const ids = JSON.parse(dailyEventIds);
-      const allEvents = JSON.parse(customEvents);
-
-      if (ids.length === 5) {
-        // Use admin-selected events
-        const selectedEvents = ids
-          .map((id: string) => allEvents.find((e: Event) => e.id === id))
-          .filter(Boolean);
-        setEvents(selectedEvents);
-        setLoading(false);
-        return;
-      }
-    }
-
-    // Otherwise use API (date-based rotation)
     fetch("/api/events")
       .then((res) => res.json())
       .then((data) => {
         setEvents(data.events);
+        setLoading(false);
+      })
+      .catch((error) => {
+        console.error("Failed to load events", error);
         setLoading(false);
       });
   }, []);
@@ -214,24 +225,33 @@ export default function Home() {
   if (gameState === "instructions") {
     return (
       <div className="min-h-[100svh] flex items-center justify-center bg-gradient-to-br from-violet-100 via-sky-100 to-rose-100 dark:from-gray-950 dark:via-indigo-950 dark:to-purple-900 px-6 py-12">
-        <div className="w-full max-w-xl rounded-[2.5rem] bg-white/90 dark:bg-gray-900/80 backdrop-blur-xl border border-white/40 dark:border-gray-700/60 shadow-[0_30px_80px_rgba(79,70,229,0.25)] px-6 py-10 sm:px-10 flex flex-col gap-8">
-          <div className="text-center space-y-3">
+        <div className="w-full max-w-xl rounded-[2.5rem] bg-white/95 dark:bg-gray-900/85 backdrop-blur-xl shadow-[0_30px_80px_rgba(79,70,229,0.25)] px-6 py-12 sm:px-12 flex flex-col gap-10">
+          <div className="text-center space-y-4">
             <p className="inline-flex items-center rounded-full bg-indigo-100/80 dark:bg-indigo-900/50 px-4 py-1 text-sm font-semibold text-indigo-600 dark:text-indigo-300 tracking-[0.2em] uppercase">
-              Daily history challenge
+              Wen Wuzz It
             </p>
+            {todaysEmojis.length === 5 && (
+              <div className="flex items-center justify-center gap-3 text-2xl sm:text-3xl" aria-label="Today's emoji hints">
+                {todaysEmojis.map((emoji, index) => (
+                  <span key={`${emoji}-${index}`} className="drop-shadow-sm">
+                    {emoji}
+                  </span>
+                ))}
+              </div>
+            )}
             <h1 className="text-4xl sm:text-5xl font-bold leading-tight">
               <span className="bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 bg-clip-text text-transparent">
                 WhenWasIt? 📅
               </span>
             </h1>
-            <p className="text-base sm:text-lg text-gray-600 dark:text-gray-300">
+            <p className="text-base sm:text-lg text-gray-600 dark:text-gray-300 text-balance max-w-md mx-auto">
               Guess the year of five iconic events before the clock runs out.
             </p>
           </div>
 
           {/* Username Input */}
-          <div className="space-y-3">
-            <label className="block text-xs font-semibold uppercase tracking-[0.25em] text-gray-500 dark:text-gray-400 text-center">
+          <div className="space-y-3 text-center">
+            <label className="block text-xs font-semibold uppercase tracking-[0.25em] text-gray-500 dark:text-gray-400">
               leaderboard name (optional)
             </label>
             <input
@@ -239,30 +259,35 @@ export default function Home() {
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && startGame()}
-              className="w-full rounded-2xl border border-gray-200/80 dark:border-gray-700 bg-white/90 dark:bg-gray-800/80 px-6 py-4 text-center text-lg text-gray-900 dark:text-white placeholder:text-gray-300 focus:outline-none focus:ring-4 focus:ring-indigo-200 dark:focus:ring-indigo-900 focus:border-indigo-400 dark:focus:border-indigo-500 transition"
+              className="w-full rounded-[1.75rem] border border-transparent bg-white shadow-lg shadow-indigo-500/10 dark:bg-gray-800/90 dark:shadow-indigo-900/30 px-6 py-4 text-center text-lg text-gray-900 dark:text-white placeholder:text-gray-400 focus:outline-none focus:ring-4 focus:ring-indigo-200/70 dark:focus:ring-indigo-900"
               placeholder="Play as..."
               maxLength={20}
             />
             <p className="text-xs text-gray-500 dark:text-gray-400 text-center">
-              No account needed — your results stay on this device.
+              Scores post to today’s leaderboard — we’ll remember your name for next time.
             </p>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="flex flex-col gap-3">
             {[
-              { icon: "📜", text: "Five events per round" },
-              { icon: "⏱️", text: "Timer per question" },
-              { icon: "🎯", text: "Closer = higher score" },
-              { icon: "🏆", text: "Share + leaderboard" },
+              { icon: "📜", title: "Five events per round", blurb: "History at hyper-speed." },
+              { icon: "⏱️", title: "Beat the countdown", blurb: "Lock in before the timer fades." },
+              { icon: "🎯", title: "Closer hits score big", blurb: "Tighter guesses = massive points." },
+              { icon: "🏆", title: "Share your glory", blurb: "Climb today’s leaderboard in one tap." },
             ].map((item) => (
               <div
-                key={item.text}
-                className="flex items-center gap-3 rounded-2xl border border-indigo-100/60 dark:border-indigo-900/60 bg-gradient-to-br from-white/80 to-indigo-50/60 dark:from-indigo-950/40 dark:to-purple-950/40 px-4 py-4 shadow-sm"
+                key={item.title}
+                className="rounded-[2rem] bg-gradient-to-r from-white/90 via-indigo-50/70 to-purple-50/70 dark:from-indigo-950/40 dark:via-purple-950/40 dark:to-pink-950/30 px-5 py-4 shadow-lg shadow-indigo-500/10 dark:shadow-black/40 flex items-start gap-4 text-left"
               >
                 <span className="text-2xl">{item.icon}</span>
-                <p className="text-sm font-semibold text-gray-700 dark:text-gray-200">
-                  {item.text}
-                </p>
+                <div className="space-y-1">
+                  <p className="text-sm sm:text-base font-semibold text-gray-800 dark:text-gray-100">
+                    {item.title}
+                  </p>
+                  <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">
+                    {item.blurb}
+                  </p>
+                </div>
               </div>
             ))}
           </div>
@@ -296,7 +321,17 @@ export default function Home() {
               {countdown > 0 ? countdown : "GO"}
             </span>
           </div>
-          <p className="text-sm uppercase tracking-[0.4em] opacity-80">Get ready…</p>
+          <div className="flex items-center gap-4 text-base uppercase tracking-[0.4em] text-white/80">
+            {["Wen.", "Wuzz.", "It..?"].map((word, index) => (
+              <span
+                key={word}
+                className="wwi-pulse-word"
+                style={{ animationDelay: `${index * 0.45}s` }}
+              >
+                {word}
+              </span>
+            ))}
+          </div>
         </div>
       </div>
     );
@@ -309,7 +344,7 @@ export default function Home() {
 
     return (
       <div className="min-h-[100svh] flex items-center justify-center px-6 py-12 bg-gradient-to-br from-violet-100 via-sky-100 to-rose-100 dark:from-gray-950 dark:via-indigo-950 dark:to-purple-900">
-        <div className="w-full max-w-3xl rounded-[2.5rem] bg-white/90 dark:bg-gray-900/85 backdrop-blur-[18px] border border-white/40 dark:border-gray-800/60 shadow-[0_35px_90px_rgba(79,70,229,0.25)] px-6 py-10 sm:px-12 space-y-8">
+        <div className="w-full max-w-3xl rounded-[2.5rem] bg-white/90 dark:bg-gray-900/85 backdrop-blur-[18px] shadow-[0_35px_90px_rgba(79,70,229,0.25)] px-6 py-10 sm:px-12 space-y-8">
           <h1 className="text-center text-4xl sm:text-5xl font-bold">
             <span className="bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 bg-clip-text text-transparent">
               Game Complete! 🎉
@@ -396,8 +431,8 @@ export default function Home() {
   const currentEvent = events[currentEventIndex];
 
   return (
-    <div className="min-h-[100svh] bg-gradient-to-br from-slate-900 via-indigo-900 to-purple-900 dark:from-black dark:via-slate-950 dark:to-indigo-950 px-4 py-6 flex items-center justify-center">
-      <div className="w-full max-w-md rounded-[2.5rem] border border-white/30 dark:border-gray-800/60 bg-white/85 dark:bg-gray-900/85 backdrop-blur-[18px] shadow-[0_35px_90px_rgba(15,23,42,0.55)] px-6 py-6 sm:px-8 sm:py-8 flex flex-col h-full max-h-[720px]">
+    <div className="min-h-[100svh] bg-gradient-to-br from-slate-900 via-indigo-900 to-purple-900 dark:from-black dark:via-slate-950 dark:to-indigo-950 flex justify-center">
+      <div className="w-full max-w-md mx-4 sm:mx-0 box-border rounded-[2.5rem] bg-white/85 dark:bg-gray-900/85 backdrop-blur-[18px] shadow-[0_35px_90px_rgba(15,23,42,0.55)] px-6 py-6 sm:px-8 sm:py-8 flex flex-col h-[100svh] sm:h-auto sm:max-h-[720px] sm:my-8">
         {/* Header */}
         <div className="flex items-center justify-between gap-3 mb-6">
           <div className="flex items-center gap-3 rounded-full bg-indigo-100/80 dark:bg-indigo-900/30 px-4 py-2">
@@ -427,7 +462,7 @@ export default function Home() {
           </p>
         </div>
 
-        <div className="flex-1 flex flex-col gap-6">
+        <div className="flex-1 flex flex-col gap-6 pb-6">
           <NumericKeypad
             value={yearInput}
             onChange={setYearInput}
@@ -436,13 +471,15 @@ export default function Home() {
             maxLength={4}
           />
 
-          <button
-            onClick={handleSubmit}
-            disabled={!yearInput}
-            className="w-full rounded-[1.5rem] bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 py-4 text-lg font-semibold text-white shadow-lg shadow-purple-500/30 transition-all duration-200 hover:scale-[1.01] active:scale-95 disabled:cursor-not-allowed disabled:bg-gradient-to-r disabled:from-slate-300 disabled:to-slate-400 dark:disabled:from-gray-700 dark:disabled:to-gray-800"
-          >
-            Lock It In ✨
-          </button>
+          <div className="mt-auto">
+            <button
+              onClick={handleSubmit}
+              disabled={!yearInput}
+              className="wwi-lock-button w-full rounded-[2.5rem] bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 text-3xl font-semibold text-white shadow-2xl shadow-purple-500/40 transition-transform duration-200 hover:scale-[1.01] active:scale-95 disabled:cursor-not-allowed disabled:bg-gradient-to-r disabled:from-slate-300 disabled:to-slate-400 dark:disabled:from-gray-700 dark:disabled:to-gray-800 flex items-center justify-center"
+            >
+              Next
+            </button>
+          </div>
         </div>
 
         {/* Progress Dots */}

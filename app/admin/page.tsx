@@ -16,44 +16,64 @@ export default function Admin() {
     emoji: "",
   });
   const [activeTab, setActiveTab] = useState<"events" | "daily" | "leaderboard">("events");
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [dailyError, setDailyError] = useState<string | null>(null);
+  const [isUpdatingDaily, setIsUpdatingDaily] = useState(false);
+  const [dailyUpdatedAt, setDailyUpdatedAt] = useState<string | null>(null);
+  const [dailySelectedFor, setDailySelectedFor] = useState<string>(() =>
+    new Date().toISOString().split("T")[0]
+  );
 
   useEffect(() => {
     const auth = localStorage.getItem("adminAuth");
     if (auth === "authenticated") {
       setIsAuthenticated(true);
-      loadData();
+    } else {
+      setIsLoading(false);
     }
   }, []);
 
-  const loadData = () => {
-    // Load events
-    const storedEvents = localStorage.getItem("customEvents");
-    if (storedEvents) {
-      setEvents(JSON.parse(storedEvents));
-    } else {
-      fetch("/api/events")
-        .then((res) => res.json())
-        .then((data) => {
-          setEvents(data.events);
-          localStorage.setItem("customEvents", JSON.stringify(data.events));
-        });
-    }
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    loadData();
+  }, [isAuthenticated]);
 
-    // Load daily events
-    const storedDaily = localStorage.getItem("dailyEventIds");
-    if (storedDaily) {
-      setDailyEvents(JSON.parse(storedDaily));
-    }
+  async function loadData() {
+    setIsLoading(true);
+    setLoadError(null);
 
-    // Load leaderboard
-    const storedLeaderboard = localStorage.getItem("leaderboard");
-    if (storedLeaderboard) {
-      const sorted = JSON.parse(storedLeaderboard).sort(
-        (a: LeaderboardEntry, b: LeaderboardEntry) => b.totalScore - a.totalScore
-      );
-      setLeaderboard(sorted);
+    try {
+      const response = await fetch("/api/daily-events");
+
+      if (!response.ok) {
+        throw new Error(`Request failed (${response.status})`);
+      }
+
+      const data = await response.json();
+      setEvents((data.events ?? []).map((event: Event) => ({ ...event, id: event.id.toString() })));
+      const selection = (data.dailyEventIds ?? []).map((id: string) => id.toString());
+      setDailyEvents(selection);
+      setDailyUpdatedAt(data.lastUpdated ?? null);
+      setDailySelectedFor(data.selectedFor ?? new Date().toISOString().split("T")[0]);
+
+      // Load leaderboard snapshot from local storage for now
+      const storedLeaderboard = localStorage.getItem("leaderboard");
+      if (storedLeaderboard) {
+        const sorted = JSON.parse(storedLeaderboard).sort(
+          (a: LeaderboardEntry, b: LeaderboardEntry) => b.totalScore - a.totalScore
+        );
+        setLeaderboard(sorted);
+      } else {
+        setLeaderboard([]);
+      }
+    } catch (error) {
+      console.error("Failed to load admin data", error);
+      setLoadError("Unable to load events from Supabase. Check the network or credentials.");
+    } finally {
+      setIsLoading(false);
     }
-  };
+  }
 
   const handleLogin = () => {
     if (password === "12345") {
@@ -69,6 +89,12 @@ export default function Admin() {
     localStorage.removeItem("adminAuth");
     setIsAuthenticated(false);
     setPassword("");
+    setEvents([]);
+    setDailyEvents([]);
+    setLeaderboard([]);
+    setDailyUpdatedAt(null);
+    setLoadError(null);
+    setDailyError(null);
   };
 
   const saveEvents = (updatedEvents: Event[]) => {
@@ -96,10 +122,10 @@ export default function Admin() {
   const handleDeleteEvent = (id: string) => {
     if (confirm("Are you sure you want to delete this event?")) {
       saveEvents(events.filter((e) => e.id !== id));
-      // Also remove from daily if present
-      const newDaily = dailyEvents.filter((eid) => eid !== id);
-      setDailyEvents(newDaily);
-      localStorage.setItem("dailyEventIds", JSON.stringify(newDaily));
+      // Also remove from daily if present (Supabase update handled via toggle)
+      if (dailyEvents.includes(id)) {
+        setDailyEvents((prev) => prev.filter((eid) => eid !== id));
+      }
     }
   };
 
@@ -114,7 +140,9 @@ export default function Admin() {
     setEditingEvent(null);
   };
 
-  const toggleDailyEvent = (eventId: string) => {
+  const toggleDailyEvent = async (eventId: string) => {
+    if (isUpdatingDaily) return;
+
     let newDaily: string[];
     if (dailyEvents.includes(eventId)) {
       newDaily = dailyEvents.filter((id) => id !== eventId);
@@ -125,8 +153,43 @@ export default function Admin() {
       }
       newDaily = [...dailyEvents, eventId];
     }
+
+    const previous = dailyEvents;
     setDailyEvents(newDaily);
-    localStorage.setItem("dailyEventIds", JSON.stringify(newDaily));
+    setDailyError(null);
+
+    setIsUpdatingDaily(true);
+    try {
+      const response = await fetch("/api/daily-events", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ eventIds: newDaily, selectedFor: dailySelectedFor }),
+      });
+
+      if (!response.ok) {
+        const errorBody = await response.json().catch(() => ({}));
+        throw new Error(errorBody.error || "Failed to update daily selection");
+      }
+
+      const payload = await response.json().catch(() => null);
+      if (payload?.eventIds) {
+        setDailyEvents(payload.eventIds.map((id: string) => id.toString()));
+      }
+      if (payload?.selectedFor) {
+        setDailySelectedFor(payload.selectedFor);
+      }
+      setDailyUpdatedAt(payload?.updatedAt ?? new Date().toISOString());
+    } catch (error) {
+      console.error("Failed to update daily selection", error);
+      setDailyError(
+        error instanceof Error ? error.message : "Unable to update daily selection."
+      );
+      setDailyEvents(previous);
+    } finally {
+      setIsUpdatingDaily(false);
+    }
   };
 
   const handleDeleteLeaderboardEntry = (index: number) => {
@@ -216,6 +279,18 @@ export default function Admin() {
     );
   }
 
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 dark:from-gray-900 dark:via-indigo-950 dark:to-purple-950">
+        <div className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-xl rounded-[2rem] shadow-2xl px-10 py-12 text-center">
+          <p className="text-lg font-semibold text-gray-700 dark:text-gray-200">
+            Loading admin data...
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen p-4 bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 dark:from-gray-900 dark:via-indigo-950 dark:to-purple-950">
       <div className="max-w-7xl mx-auto">
@@ -242,6 +317,12 @@ export default function Admin() {
               </button>
             </div>
           </div>
+
+          {loadError && (
+            <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-800/80 dark:bg-red-900/20 dark:text-red-300">
+              {loadError}
+            </div>
+          )}
 
           {/* Tabs */}
           <div className="flex gap-2 mb-8 bg-gray-100 dark:bg-gray-700/50 p-2 rounded-2xl">
@@ -435,14 +516,27 @@ export default function Admin() {
 
           {activeTab === "daily" && (
             <div>
-              <div className="mb-6 p-6 bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20 rounded-2xl border-2 border-indigo-100 dark:border-indigo-900">
-                <h2 className="text-2xl font-bold mb-2 text-gray-900 dark:text-white">
+              <div className="mb-6 p-6 bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20 rounded-2xl border-2 border-indigo-100 dark:border-indigo-900 space-y-2">
+                <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
                   Select Today's Events
                 </h2>
                 <p className="text-gray-600 dark:text-gray-400">
                   Choose exactly 5 events to display for today's game. Click events below to
                   toggle selection.
                 </p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  Date: {dailySelectedFor}
+                </p>
+                {dailyUpdatedAt && (
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    Last updated {new Date(dailyUpdatedAt).toLocaleString()}
+                  </p>
+                )}
+                {dailyError && (
+                  <p className="text-sm text-red-600 dark:text-red-400">
+                    {dailyError}
+                  </p>
+                )}
               </div>
 
               <div className="space-y-3">
@@ -452,11 +546,12 @@ export default function Admin() {
                     <button
                       key={event.id}
                       onClick={() => toggleDailyEvent(event.id)}
+                      disabled={isUpdatingDaily}
                       className={`w-full flex items-center justify-between p-4 rounded-2xl border-2 transition-all ${
                         isSelected
                           ? "bg-gradient-to-r from-indigo-100 to-purple-100 dark:from-indigo-900/40 dark:to-purple-900/40 border-indigo-500 dark:border-indigo-400 shadow-lg"
                           : "bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-700 dark:to-gray-700/80 border-gray-200 dark:border-gray-600 hover:border-indigo-300 dark:hover:border-indigo-600"
-                      }`}
+                      } ${isUpdatingDaily ? "opacity-75 cursor-wait" : ""}`}
                     >
                       <div className="flex items-center gap-4">
                         <span className="text-3xl">{event.emoji}</span>
